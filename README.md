@@ -1,5 +1,8 @@
 # FileSystem Change Tracker
 
+[![CI](https://github.com/vlastimilvajnorak/file-system-checker/actions/workflows/ci.yml/badge.svg)](https://github.com/vlastimilvajnorak/file-system-checker/actions/workflows/ci.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE.txt)
+
 ASP.NET Core REST API, které po ručním spuštění analyzuje zadaný adresář (včetně podstromu)
 a hlásí změny oproti poslednímu spuštění: nové, změněné a odstraněné soubory (a nové/odstraněné
 podadresáře). U každého souboru eviduje verzi.
