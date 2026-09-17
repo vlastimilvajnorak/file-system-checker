@@ -6,6 +6,70 @@ podadresáře). U každého souboru eviduje verzi.
 
 ---
 
+## Zadání
+
+*Cvičný úkol PUX design – Hledáme šikovného web developera!*
+
+> Napište jednoduchý program, který bude umět detekovat změny v adresáři uvedeném na vstupu.
+>
+> Adresář se bude nacházet na filesystému, na kterém běží daný program (lokální filesystém). Při
+> prvním spuštění si program obsah daného adresáře analyzuje a při každém dalším spuštění bude
+> hlásit změny od svého posledního spuštění, tj:
+>
+> a) seznam nových souborů a podadresářů,
+> b) seznam změněných souborů (změnou se rozumí změna obsahu daného souboru),
+> c) seznam odstraněných souborů a podadresářů.
+>
+> U každého souboru evidujte číslo jeho aktuální verze (na začátku budou mít všechny soubory verzi 1,
+> s každou detekovanou změnou daného souboru bude jeho verze navýšena o 1).
+>
+> Program realizujte jako jednoduchou ASP.NET aplikaci naprogramovanou v C#. UI vytvořte jako
+> webovou aplikaci dle své volby (Core MVC, MVC, REST API)
+>
+> Můžete předpokládat, že velikost souborů v adresáři bude do 50 MB a že počet souborů v každém
+> adresáři bude nanejvýš 100.
+>
+> Program se bude spouštět ručně z UI stiskem tlačítka nebo zavoláním REST API endpointu
+> (nedetekujte změny filesystému automaticky). Pro perzistenci dat nepoužívejte databázi.
+>
+> V případě MVC bude UI obsahovat alespoň textbox (textový input) pro zadání cesty k analyzovanému
+> adresáři, tlačítko pro spuštění analýzy a výpis jejího výsledku. V případě REST API bude cesta
+> předána jako URL parametr.
+>
+> Své řešení stručně popište a zmiňte i jeho případná omezení. Pokud k vygenerování kódu použijete
+> AI, uveďte to v popisu.
+
+## Stručný popis řešení
+
+- **ASP.NET Core Web API v C#** (.NET 10) + jednoduché statické **mini UI** (textbox na cestu,
+  tlačítko, živý výpis průběhu a výsledku) nad stejnými REST endpointy.
+- Analýza běží **na pozadí** a klient ji sleduje pollingem nebo přes SSE stream — endpointy a důvod
+  tohoto návrhu jsou popsané níže v [TL;DR](#tldr--rychlý-start) a [Klíčových rozhodnutích](#klíčová-rozhodnutí).
+- **Detekce změny obsahu** = streamovaný SHA-256 hash souboru; nové/změněné/odstraněné soubory
+  a podadresáře se zjistí porovnáním s předchozím uloženým stavem (snapshotem).
+- **Verzování** podle zadání: nový soubor verze 1, každá detekovaná změna verzi zvýší o 1.
+- **Perzistence bez databáze** — jeden JSON snapshot na disku na analyzovaný adresář, mimo sledovaný
+  strom, s atomickým zápisem.
+- Podrobný popis komponent, návrhových rozhodnutí, omezení a možných rozšíření je v sekcích
+  [Jak to funguje](#jak-to-funguje), [Klíčová rozhodnutí](#klíčová-rozhodnutí) a
+  [Omezení a minusy](#omezení-a-minusy) níže.
+
+## Technologický stack
+
+- **.NET 10** / **C#** (`LangVersion` latest, `Nullable` a `ImplicitUsings` zapnuté)
+- **ASP.NET Core Web API** (`Microsoft.NET.Sdk.Web`) — REST endpointy, `BackgroundService`
+  (`AnalysisWorker`) pro zpracování analýz na pozadí, `System.Threading.Channels` jako fronta úloh
+- **Server-Sent Events** (nativní `EventSource` v prohlížeči) pro živý stream průběhu analýzy
+- **Swashbuckle / Microsoft.AspNetCore.OpenApi** — Swagger UI a OpenAPI dokument v Development
+- **Mini UI**: statický HTML/CSS/JS (bez frontend frameworku) ve `wwwroot`
+- **Perzistence**: JSON soubory na disku (bez databáze), atomický zápis
+- **Testy**: xUnit, `Microsoft.AspNetCore.Mvc.Testing` (`WebApplicationFactory` + in-memory
+  TestServer) pro integrační testy HTTP vrstvy, `coverlet.collector` pro code coverage
+- **Central Package Management** (`Directory.Packages.props`) a sdílené MSBuild vlastnosti
+  (`Directory.Build.props`) napříč projekty solution
+
+---
+
 ## TL;DR / rychlý start
 
 Prerekvizita: **.NET 10 SDK**.
@@ -265,13 +329,6 @@ by na Linuxu zůstalo doslovným názvem adresáře).
 | `SnapshotsDirectory` | umístění snapshotů; proměnné prostředí se expandují, relativní hodnota se vztahuje k ContentRoot, cesta se plně normalizuje | Windows `%LOCALAPPDATA%\FileSystemChangeTracker\snapshots`, Linux `~/.local/share/FileSystemChangeTracker/snapshots` (nezávislé na způsobu spuštění — VS/F5, `dotnet run` i přímé exe sdílí totéž úložiště) |
 | `MaxConcurrentAnalyses` | max. souběžně běžících analýz na pozadí | `8` |
 | `CheckpointInterval` | jak často se během **prvního (nedokončeného)** běhu ukládá průběžný mezistav (pád procesu ztratí nejvýše takto starou práci); nad kompletní baseline se neukládá; `00:00:00` = vypnuto | `00:00:30` |
-
----
-
-## Použití AI
-
-K vygenerování kódu jsem použil AI nástroj (Claude). Návrh řešení, zadávání požadavků,
-testování a revize výsledku jsou moje práce.
 
 ---
 
