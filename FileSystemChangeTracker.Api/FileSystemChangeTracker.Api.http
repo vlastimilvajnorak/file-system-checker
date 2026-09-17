@@ -1,0 +1,28 @@
+@host = http://localhost:5250
+
+### Spuštění analýzy adresáře (cesta jako URL parametr). Vrátí 202 a analysisId.
+POST {{host}}/api/analyses?path=C:%5CData%5CWatched
+
+### Dotaz na stav / výsledek analýzy (doplň analysisId z odpovědi výše).
+GET {{host}}/api/analyses/00000000-0000-0000-0000-000000000000
+Accept: application/json
+
+### Živý stream průběhu (Server-Sent Events) až do dokončení analýzy.
+GET {{host}}/api/analyses/00000000-0000-0000-0000-000000000000/events
+Accept: text/event-stream
+
+### Zrušení běžící analýzy (stav Cancelled s částečným výsledkem; u prvního běhu se zpracovaná část uloží jako neúplný výchozí stav, jinak výchozí stav zůstává).
+DELETE {{host}}/api/analyses/00000000-0000-0000-0000-000000000000
+
+### Existuje pro cestu výchozí stav (baseline)? Vrací i příznak neúplné baseline (partialReason).
+GET {{host}}/api/analyses/baseline?path=C:%5CData%5CWatched
+Accept: application/json
+
+### Reset výchozího stavu (smaže snapshot; při běžící analýze vrací 409).
+DELETE {{host}}/api/analyses/baseline?path=C:%5CData%5CWatched
+
+### Procházení adresářů (prázdná cesta = disky). Podklad pro výběr cesty v UI.
+GET {{host}}/api/browse?path=C:%5C
+Accept: application/json
+
+###

@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="FileSystemChangeTracker.Api/FileSystemChangeTracker.Api.csproj" />
+  <Project Path="FileSystemChangeTracker.Tests/FileSystemChangeTracker.Tests.csproj" />
+</Solution>

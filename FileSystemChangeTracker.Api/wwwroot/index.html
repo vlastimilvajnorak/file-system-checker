@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FileSystem Change Tracker</title>
+  <!-- Industry design system: tokeny + komponenty (.btn, .input, .blueprint, .tag, .seg, .table). Rozvržení: řádek ovládání, čítače, stránkovaná tabulka změn. -->
+  <link rel="stylesheet" href="industry.css">
+  <style>
+    [hidden] { display: none !important; }
+    :root { color-scheme: light; }
+    html, body { height: 100%; }
+    body { margin: 0; font-size: 14px; display: flex; flex-direction: column; overflow: hidden; }
+    .nav { flex: none; }
+    .nav-brand { font-size: 24px; }
+    #status { font-size: 13px; }
+    .nav { border-bottom: 1px solid var(--color-divider); padding: var(--space-3) var(--space-8); }
+    #status:empty { display: none; }
+    main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: var(--space-6); padding: var(--space-6) var(--space-8); box-sizing: border-box; }
+    #controls, #output { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
+    form { display: flex; flex-direction: column; gap: var(--space-2); }
+    .field-label { display: block; font-size: 13px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+    .btn { min-height: 36px; white-space: nowrap; min-width: 10rem; }
+    .btn:disabled { cursor: wait; }
+    #pathField { position: relative; display: flex; }
+    #pathField input { padding-right: 44px; }
+    #browse { position: absolute; right: 0; top: 0; height: 36px; min-width: 0; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+    #browse:hover:not(:disabled) { color: var(--color-accent-700); }
+    /* Procházeč adresářů — blueprint rámeček, Vybrat pod ním vpravo. */
+    #pickerHead { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-divider); }
+    #pickerPath { flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+    #pickerClose { width: 28px; height: 28px; min-height: 0; min-width: 0; padding: 0; }
+    #pickerList { list-style: none; margin: 0; padding: var(--space-1) 0; max-height: 15rem; overflow-y: auto; }
+    #pickerList li { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); cursor: pointer; font-size: 14px; }
+    #pickerList li:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+    #pickerList li.up { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+    #pickerList .ico { flex: none; color: var(--color-accent-700); }
+    #pickerError { color: var(--color-accent-800); font-size: 13px; padding: var(--space-2) var(--space-3) 0; }
+    #pickerError:empty { display: none; }
+    #pickerFoot { display: flex; justify-content: flex-end; margin-top: var(--space-2); }
+    /* Karta výchozího stavu (kicker + titulek + text + reset). */
+    #baseline { padding: 0; border: 0; }
+    #baseline:not(.on) { display: none; }
+    #hintTitle { font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 17px; line-height: 1.2; }
+    #hint { margin: 0; font-size: 14px; text-wrap: pretty; }
+    #resetBaseline { align-self: flex-start; }
+    /* Neurčitý průběh. */
+    #bar { display: none; height: 2px; background: var(--color-accent-200); overflow: hidden; position: relative; }
+    #bar.on { display: block; }
+    #bar > div { position: absolute; top: 0; height: 100%; width: 30%; background: var(--color-accent); animation: slide 1.2s ease-in-out infinite; }
+    @keyframes slide { 0% { left: -30%; } 100% { left: 100%; } }
+    /* Čítače — stejné buňky mřížky. */
+    #stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+    #stats:empty { display: none; }
+    #stats > span { display: flex; flex-direction: column-reverse; gap: 2px; padding: var(--space-3) var(--space-4); }
+    #stats b { font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 32px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    #stats b small { font-size: 18px; font-weight: 400; }
+    #stats .muted { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--color-accent-700); }
+    #current, #error { font-family: ui-monospace, Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+    #current { display: flex; align-items: center; gap: var(--space-2); color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+    #current:empty, #error:empty { display: none; }
+    #error { color: var(--color-accent-800); }
+    #result { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+    .tableWrap { flex: 1; min-height: 0; overflow: hidden; }
+    #output { min-height: 0; }
+    .tableWrap .table { table-layout: fixed; }
+    #result:empty { display: none; }
+    #result h2 { font-size: 20px; margin: 0 0 var(--space-1); }
+    #result p { margin: 0; }
+    /* Tabulka změn. */
+    .tableHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+    .tableHead h3 { margin: 0; }
+    .table { font-size: 14px; }
+    .tag { font-size: 12px; }
+    /* Šířka segmentů podle obsahu (ne pevných 130px): počty ve statisících se jinak zalamovaly na dva řádky. */
+    #filterSeg { display: grid; grid-auto-flow: column; grid-auto-columns: max-content; }
+    #filterSeg .seg-opt { justify-content: center; white-space: nowrap; min-width: 130px; }
+    .table td.path { font-family: ui-monospace, Consolas, monospace; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .table td.ver { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .muted { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+
+    /* Řádek ovládání: cesta | reset | spustit; nápověda pod ním přes celou šířku. */
+    #controls { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: var(--space-2); align-items: end; }
+    form, #baseline { display: contents; }
+    #baseline:not(.on) #hint, #baseline:not(.on) #resetBaseline { display: none; }
+    .field-label { grid-column: 1; }
+    #pathField { grid-column: 1; grid-row: 2; }
+    #resetBaseline { grid-column: 2; grid-row: 2; }
+    #run { grid-column: 3; grid-row: 2; }
+    #cancel { grid-column: 4; grid-row: 2; }
+    #pickerWrap, #hint { grid-column: 1 / -1; }
+    #baseline .corner, #baseline .card-kicker, #hintTitle { display: none; }
+    #stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    /* Stránkování. */
+    .pager { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--space-4); flex-wrap: wrap; font-size: 14px; }
+    .pager .pages { display: flex; gap: var(--space-2); align-items: center; justify-content: center; }
+    .pager .btn { min-width: 0; min-height: 32px; padding: 0 var(--space-3); font-size: 14px; }
+    .pager .btn.cur { background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent); }
+    .pager .info { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <span class="nav-brand">FileSystem Change Tracker</span>
+    <span id="status" class="tag tag-accent" aria-live="polite"></span>
+</header>
+
+  <main>
+    <section id="controls">
+      <form id="form">
+        <label class="field-label" for="path">Cesta k adresáři</label>
+        <div id="pathField">
+          <input type="text" id="path" class="input" placeholder="např. C:\Data\Watched" required>
+          <button type="button" id="browse" class="btn btn-ghost btn-icon" title="Procházet adresáře" aria-label="Procházet adresáře">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 7l-1.116-2.231c-.32-.642-.481-.963-.72-1.198a2 2 0 0 0-.748-.462C10.1 3 9.74 3 9.022 3H5.2c-1.12 0-1.68 0-2.108.218a2 2 0 0 0-.874.874C2 4.52 2 5.08 2 6.2V7m0 0h15.2c1.68 0 2.52 0 3.162.327a3 3 0 0 1 1.311 1.311C22 9.28 22 10.12 22 11.8v4.4c0 1.68 0 2.52-.327 3.162a3 3 0 0 1-1.311 1.311C19.72 21 18.88 21 17.2 21H6.8c-1.68 0-2.52 0-3.162-.327a3 3 0 0 1-1.311-1.311C2 18.72 2 17.88 2 16.2V7Z"/></svg>
+          </button>
+        </div>
+        <div id="pickerWrap" hidden>
+          <div id="picker" class="blueprint">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <div id="pickerHead">
+              <span id="pickerPath"></span>
+              <button type="button" id="pickerClose" class="btn btn-ghost btn-icon" title="Zavřít (Esc)" aria-label="Zavřít">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <ul id="pickerList"></ul>
+            <div id="pickerError"></div>
+          </div>
+          <div id="pickerFoot">
+            <button type="button" id="pickerSelect" class="btn btn-secondary">Vybrat</button>
+          </div>
+        </div>
+        <button type="submit" id="run" class="btn btn-primary blueprint"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Spustit analýzu</button>
+        <button type="button" id="cancel" class="btn btn-secondary" hidden>Zrušit</button>
+      </form>
+
+      <div id="baseline" class="blueprint">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="card-kicker">Výchozí stav</div>
+        <div id="hintTitle"></div>
+        <p id="hint" class="muted"></p>
+        <button type="button" id="resetBaseline" class="btn btn-secondary" hidden>Resetovat výchozí stav</button>
+      </div>
+    </section>
+
+    <section id="output">
+      <div id="bar"><div></div></div>
+      <div id="stats"></div>
+      <div id="current"></div>
+      <div id="error"></div>
+      <div id="result"></div>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById("form");
+    const pathInput = document.getElementById("path");
+    const runButton = document.getElementById("run");
+    const cancelButton = document.getElementById("cancel");
+    const browseButton = document.getElementById("browse");
+    const resetBaselineButton = document.getElementById("resetBaseline");
+    const bar = document.getElementById("bar");
+    const baselineBox = document.getElementById("baseline");
+    const hintTitle = document.getElementById("hintTitle");
+    const hint = document.getElementById("hint");
+    const stats = document.getElementById("stats");
+    const current = document.getElementById("current");
+    const errorBox = document.getElementById("error");
+    const resultBox = document.getElementById("result");
+    const statusTag = document.getElementById("status");
+    let eventSource = null;
+    let runningAnalysisId = null;
+
+    // --- Filtr a stránkování tabulky ---
+    let tableFilter = "all";
+    let page = 1;
+    const PAGE_SIZE_MAX = 25;
+    let pageSizeFit = PAGE_SIZE_MAX; // kolik řádků se vejde do viditelné části (změřeno po vykreslení)
+
+    function setStatus(text, kind) {
+      statusTag.textContent = text ?? "";
+      statusTag.className = "tag " + (kind === "neutral" ? "tag-neutral" : "tag-accent");
+    }
+    function setHint(title, text) {
+      hintTitle.textContent = title ?? ""; hint.textContent = text ?? "";
+      baselineBox.classList.toggle("on", !!(title || text));
+    }
+
+    // --- Procházeč adresářů (server-side; prohlížeč skutečné cesty nezná) ---
+    const pickerWrap = document.getElementById("pickerWrap");
+    const pickerPath = document.getElementById("pickerPath");
+    const pickerList = document.getElementById("pickerList");
+    const pickerError = document.getElementById("pickerError");
+    const pickerSelect = document.getElementById("pickerSelect");
+    let pickerCurrent = null;
+
+    browseButton.addEventListener("click", () => {
+      if (pickerWrap.hasAttribute("hidden")) {
+        pickerWrap.removeAttribute("hidden");
+        loadPicker(normalizePathInput(pathInput.value) || "");
+      } else {
+        pickerWrap.setAttribute("hidden", "");
+      }
+    });
+    document.getElementById("pickerClose").addEventListener("click", () => pickerWrap.setAttribute("hidden", ""));
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !pickerWrap.hasAttribute("hidden")) pickerWrap.setAttribute("hidden", "");
+    });
+    pickerSelect.addEventListener("click", () => {
+      if (!pickerCurrent) return;
+      pathInput.value = pickerCurrent;
+      pickerWrap.setAttribute("hidden", "");
+      refreshBaselineHint();
+    });
+
+    async function loadPicker(path) {
+      pickerError.textContent = "";
+      try {
+        const response = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+        const data = await response.json();
+        if (!response.ok) {
+          if (path) await loadPicker("");
+          pickerError.textContent = data.detail ?? `HTTP ${response.status}`;
+          return;
+        }
+        renderPicker(data);
+      } catch {
+        pickerError.textContent = "Adresáře se nepodařilo načíst.";
+      }
+    }
+
+    // Untitled UI ikony (line, 2px), barva přes currentColor.
+    const svgOpen = '<svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+    const folderIcon = svgOpen + '<path d="M13 7l-1.116-2.231c-.32-.642-.481-.963-.72-1.198a2 2 0 0 0-.748-.462C10.1 3 9.74 3 9.022 3H5.2c-1.12 0-1.68 0-2.108.218a2 2 0 0 0-.874.874C2 4.52 2 5.08 2 6.2V7m0 0h15.2c1.68 0 2.52 0 3.162.327a3 3 0 0 1 1.311 1.311C22 9.28 22 10.12 22 11.8v4.4c0 1.68 0 2.52-.327 3.162a3 3 0 0 1-1.311 1.311C19.72 21 18.88 21 17.2 21H6.8c-1.68 0-2.52 0-3.162-.327a3 3 0 0 1-1.311-1.311C2 18.72 2 17.88 2 16.2V7Z"/></svg>';
+    const driveIcon = svgOpen + '<path d="M22 12H2m20 0v6.2c0 1.12 0 1.68-.218 2.108a2 2 0 0 1-.874.874C20.48 21.4 19.92 21.4 18.8 21.4H5.2c-1.12 0-1.68 0-2.108-.218a2 2 0 0 1-.874-.874C2 19.88 2 19.32 2 18.2V12m20 0-3.28-6.56c-.4-.8-.6-1.2-.9-1.49a2 2 0 0 0-.75-.47C16.69 3.35 16.24 3.35 15.35 3.35H8.65c-.9 0-1.34 0-1.72.13a2 2 0 0 0-.75.47c-.3.29-.5.69-.9 1.49L2 12m4 4.5h.01M10 16.5h.01"/></svg>';
+    const upIcon = svgOpen + '<path d="M12 19V5m0 0-7 7m7-7 7 7"/></svg>';
+    const chevronIcon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M9 6l6 6-6 6"/></svg>';
+
+    function addRow(iconSvg, label, onClick, className) {
+      const item = document.createElement("li");
+      if (className) item.className = className;
+      if (iconSvg) item.insertAdjacentHTML("afterbegin", iconSvg);
+      const text = document.createElement("span");
+      text.textContent = label;
+      item.appendChild(text);
+      if (onClick) item.addEventListener("click", onClick);
+      pickerList.appendChild(item);
+    }
+
+    function renderPicker(data) {
+      pickerCurrent = data.currentPath;
+      pickerPath.textContent = data.isDriveList ? "Tento počítač" : data.currentPath;
+      pickerSelect.disabled = data.isDriveList;
+      pickerList.innerHTML = "";
+      if (!data.isDriveList) addRow(upIcon, "nahoru", () => loadPicker(data.parentPath ?? ""), "up");
+      for (const entry of data.directories) addRow(data.isDriveList ? driveIcon : folderIcon, entry.name, () => loadPicker(entry.path));
+      if (data.directories.length === 0 && !data.isDriveList) addRow(null, "(žádné podadresáře)", null, "up");
+    }
+
+    cancelButton.addEventListener("click", async () => {
+      if (!runningAnalysisId) return;
+      cancelButton.disabled = true;
+      // Zrušení je asynchronní: skener dokončí rozpracovaný soubor a u prvního běhu se ještě
+      // uloží zpracovaná část (nad velkým stromem sekundy) — uživatel má vidět, že se něco děje.
+      setStatus("Ruší se…", "neutral");
+      try { await fetch(`/api/analyses/${runningAnalysisId}`, { method: "DELETE" }); } catch { /* stream ohlásí stav */ }
+    });
+
+    const absolutePathPattern = /^([A-Za-z]:[\\/]|\\\\|\/)/;
+    const driveOnlyPattern = /^[A-Za-z]:$/;
+    function normalizePathInput(rawPath) {
+      const path = rawPath.trim();
+      return driveOnlyPattern.test(path) ? path + "\\" : path;
+    }
+    function pathProblem(path) {
+      if (!path) return "Zadejte cestu k adresáři.";
+      if (!absolutePathPattern.test(path)) return "Zadejte absolutní cestu (např. C:\\Data\\Watched), nebo kořen disku (C:\\).";
+      return null;
+    }
+
+    let hintTimer = null;
+    let hintRequestToken = 0;
+    pathInput.addEventListener("input", () => {
+      clearTimeout(hintTimer);
+      hintTimer = setTimeout(refreshBaselineHint, 400);
+    });
+
+    async function refreshBaselineHint() {
+      const token = ++hintRequestToken;
+      const path = normalizePathInput(pathInput.value);
+      resetBaselineButton.hidden = true;
+      if (!path) { setHint("", ""); return; }
+      if (pathProblem(path)) { setHint("Neplatná cesta", pathProblem(path)); return; }
+      try {
+        const response = await fetch(`/api/analyses/baseline?path=${encodeURIComponent(path)}`);
+        const baseline = response.ok ? await response.json() : null;
+        if (token !== hintRequestToken) return;
+        if (!baseline) { setHint("", ""); return; }
+        if (baseline.analysisRunning) { setHint("Analýza běží", "Pro tento adresář právě běží analýza."); return; }
+        if (baseline.exists && baseline.partialReason) {
+          const why = baseline.partialReason === "Cancelled" ? "byla zrušena" : "byla přerušena (např. pádem aplikace)";
+          const when = new Date(baseline.lastAnalysisUtc).toLocaleString("cs-CZ");
+          setHint("Není úplný", `Výchozí stav není úplný — analýza ${why} (${when}) a pokrývá jen zpracovanou část (${baseline.trackedFileCount} souborů). Pokračováním se nezahrnuté soubory při příští analýze nahlásí jako nové (v1), nebo výchozí stav resetujte a příští analýza ho založí celý znovu.`);
+          resetBaselineButton.dataset.path = path;
+          resetBaselineButton.hidden = false;
+        } else if (baseline.exists) {
+          const when = new Date(baseline.lastAnalysisUtc).toLocaleString("cs-CZ");
+          setHint("Existuje", `Výchozí stav existuje (poslední analýza ${when}, evidováno ${baseline.trackedFileCount} souborů) — spuštění nahlásí změny od té doby. Resetem výchozí stav smažete a příští analýza ho založí celý znovu.`);
+          resetBaselineButton.dataset.path = path;
+          resetBaselineButton.hidden = false;
+        } else {
+          setHint("Zatím není založen", "Pro tento adresář zatím není založen výchozí stav — první analýza ho vytvoří a změny se začnou hlásit od dalšího spuštění.");
+        }
+      } catch {
+        if (token === hintRequestToken) setHint("", "");
+      }
+    }
+
+    resetBaselineButton.addEventListener("click", async () => {
+      const path = normalizePathInput(pathInput.value);
+      if (!path || (path !== resetBaselineButton.dataset.path)) { refreshBaselineHint(); return; }
+      resetBaselineButton.disabled = true;
+      try {
+        const response = await fetch(`/api/analyses/baseline?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+        if (response.ok || response.status === 404) {
+          errorBox.textContent = "";
+          lastResult = null; lastStatus = null; paintResult(); stats.innerHTML = ""; current.textContent = ""; setStatus("");
+        } else {
+          const body = await response.json();
+          errorBox.textContent = body.detail ?? `HTTP ${response.status}`;
+        }
+      } catch {
+        errorBox.textContent = "Server se nepodařilo kontaktovat.";
+      }
+      resetBaselineButton.disabled = false;
+      refreshBaselineHint();
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const path = normalizePathInput(pathInput.value);
+      const problem = pathProblem(path);
+      if (problem) { errorBox.textContent = problem; return; }
+
+      pathInput.value = path;
+      eventSource?.close();
+      errorBox.textContent = ""; lastResult = null; lastResultKey = null; lastStatus = "Running"; page = 1; paintResult(); stats.innerHTML = ""; current.textContent = "";
+      runButton.disabled = true; pathInput.disabled = true; browseButton.disabled = true;
+      pickerWrap.setAttribute("hidden", "");
+      resetBaselineButton.hidden = true;
+      clearTimeout(hintTimer); hintRequestToken++;
+      bar.classList.add("on");
+      setStatus("Analýza běží");
+
+      try {
+        const response = await fetch(`/api/analyses?path=${encodeURIComponent(path)}`, { method: "POST" });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail ?? `HTTP ${response.status}`);
+        subscribe(body.analysisId);
+      } catch (err) {
+        finish(); setStatus("Chyba", "neutral");
+        errorBox.textContent = (err instanceof TypeError)
+          ? "Nepodařilo se kontaktovat server. Otevřete aplikaci přes http://localhost:5250/ (stránka nesmí běžet jako soubor ani náhled mimo server)."
+          : err.message;
+      }
+    });
+
+    function subscribe(id) {
+      runningAnalysisId = id;
+      cancelButton.hidden = false; cancelButton.disabled = false;
+      eventSource = new EventSource(`/api/analyses/${id}/events`);
+      eventSource.addEventListener("progress", (e) => renderProgress(JSON.parse(e.data)));
+      eventSource.addEventListener("result", (e) => {
+        eventSource.close();
+        const status = JSON.parse(e.data);
+        renderProgress(status); finish();
+        lastStatus = status.status; lastResult = status.result ?? null;
+        if (status.status === "Completed") setStatus("Dokončeno");
+        else if (status.status === "Cancelled") setStatus("Zrušeno", "neutral");
+        else { setStatus("Chyba", "neutral"); lastResult = null; errorBox.textContent = `${status.status}: ${status.error ?? ""}`; }
+        paintResult();
+        refreshBaselineHint();
+      });
+      eventSource.onerror = () => {
+        if (eventSource.readyState !== EventSource.CLOSED) return;
+        finish(); setStatus("Chyba", "neutral");
+        errorBox.textContent = "Spojení se serverem selhalo.";
+      };
+    }
+
+    function finish() {
+      runningAnalysisId = null;
+      runButton.disabled = false; pathInput.disabled = false; browseButton.disabled = false;
+      cancelButton.hidden = true;
+      bar.classList.remove("on");
+    }
+
+    const corners = '<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>';
+    const stat = (value, label, cls) => `<span class="blueprint${cls ? " " + cls : ""}">${corners}<b>${value}</b><span class="muted">${label}</span></span>`;
+    const num = (n) => Number(n).toLocaleString("cs-CZ");
+
+    function renderProgress(s) {
+      const megabytes = (s.progress.bytesHashed / 1048576).toLocaleString("cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+      const changes = s.result ? num(countChanges(s.result)) : "—";
+      stats.innerHTML =
+        stat(num(s.progress.directoriesScanned), "adresářů") +
+        stat(num(s.progress.filesHashed), "souborů") +
+        stat(megabytes + " <small>MB</small>", "zpracováno") +
+        stat(changes, "změn", "changes");
+      current.innerHTML = s.progress.currentFile ? chevronIcon + `<span>${escapeHtml(s.progress.currentFile)}</span>` : "";
+      if (s.status === "Running") {
+        lastStatus = "Running"; lastResult = s.result ?? null;
+        // Snímek chodí každých 500 ms, živý výsledek se ale mění jen když skener něco najde.
+        // Překreslit jen při skutečné změně — jinak by každý tik zničil stránkování/filtr pod rukou.
+        const key = JSON.stringify(lastResult);
+        if (key !== lastResultKey) { lastResultKey = key; paintResult(); }
+      }
+    }
+
+    // --- Výsledek: stránkovaná tabulka (průběžně i finálně) ---
+    let lastResult = null;
+    let lastResultKey = null;
+    let lastStatus = null;
+
+    function countChanges(r) {
+      const n = (x) => (x ?? []).length;
+      return n(r.newFiles) + n(r.newDirectories) + n(r.modifiedFiles) + n(r.deletedFiles) + n(r.deletedDirectories);
+    }
+    function rowsOf(r) {
+      const a = (x) => x ?? [];
+      return [
+        ...a(r.newFiles).map(f => ({ kind: "new", label: "Nový", cls: "tag-accent", path: f.path, ver: `v${f.version}` })),
+        ...a(r.newDirectories).map(d => ({ kind: "new", label: "Nový adresář", cls: "tag-accent", path: d.path, ver: "" })),
+        ...a(r.modifiedFiles).map(f => ({ kind: "mod", label: "Změněný", cls: "tag-outline", path: f.path, ver: `v${f.version}` })),
+        ...a(r.deletedFiles).map(f => ({ kind: "del", label: "Odstraněný", cls: "tag-neutral", path: f.path, ver: `naposledy v${f.lastKnownVersion}`, muted: true })),
+        ...a(r.deletedDirectories).map(d => ({ kind: "del", label: "Odstraněný adresář", cls: "tag-neutral", path: d.path, ver: "" })),
+        ...a(r.warnings).map(w => ({ kind: "warn", label: "Varování", cls: "tag-neutral", path: w, ver: "" })),
+      ];
+    }
+
+    function paintResult() {
+      const r = lastResult;
+      const running = lastStatus === "Running";
+      let html = "";
+      // První běh: zpracovaná část se uložila jako neúplný výchozí stav (nápověda nabídne
+      // pokračovat / resetovat). Jinak se výchozí stav nezměnil a žádná změna se neztratí.
+      if (lastStatus === "Cancelled") {
+        const note = r?.initialScan
+          ? "Zpracovaná část je uložená jako výchozí stav — soubory, na které se nedošlo, se nahlásí jako nové až při příštím dokončeném spuštění."
+          : "Výsledek pokrývá jen zpracovanou část; výchozí stav se nezměnil, takže příští dokončené spuštění nahlásí změny celého adresáře (včetně zde uvedených).";
+        html += `<div><h2>Analýza zrušena.</h2><p class="muted">${note}</p></div>`;
+      }
+      if (!r) { resultBox.innerHTML = html; return; }
+      if (r.initialScan && !running) html += `<div><p class="muted">První analýza — založen výchozí stav${r.partial ? " ze zpracované části" : ""}, změny zatím nejsou.</p></div>`;
+      resultBox.innerHTML = html + buildTableHtml(r, running); wireTable();
+    }
+
+    function buildTableHtml(r, running) {
+      const rows = rowsOf(r);
+      const cnt = (k) => rows.filter(x => x.kind === k).length;
+      const opt = (k, label, n) => `<label class="seg-opt"><input type="radio" name="filter" value="${k}"${tableFilter === k ? " checked" : ""}>${label} (${n})</label>`;
+      const seg = `<div id="filterSeg" class="seg">${opt("all", "Vše", rows.length)}${opt("new", "Nové", cnt("new"))}${opt("mod", "Změněné", cnt("mod"))}${opt("del", "Odstraněné", cnt("del"))}${opt("warn", "Varování", cnt("warn"))}</div>`;
+      const filtered = rows.filter(x => tableFilter === "all" || x.kind === tableFilter);
+      const size = pageSizeFit;
+      const pages = Math.max(1, Math.ceil(filtered.length / size));
+      if (page > pages) page = pages;
+      const from = (page - 1) * size;
+      const shown = filtered.slice(from, from + size);
+      const body = shown.length
+        ? shown.map(x => `<tr><td><span class="tag ${x.cls}">${x.label}</span></td><td class="path" title="${escapeHtml(x.path)}">${escapeHtml(x.path)}</td><td class="ver${x.muted ? " muted" : ""}">${escapeHtml(x.ver)}</td></tr>`).join("")
+        : `<tr><td colspan="3" class="muted">${r.initialScan ? "První běh změny nehlásí — zobrazí se jen varování." : running ? "Zatím žádné detekované změny." : "Žádné"}</td></tr>`;
+      return `<div class="tableHead"><h3>${r.initialScan ? (running ? "Zakládá se výchozí stav" : "Výchozí stav založen") : running ? "Průběžně detekované změny" : "Změny od minulého spuštění"}</h3>${seg}</div>
+        <div class="tableWrap"><table class="table"><thead><tr><th style="width:150px">Typ</th><th>Cesta</th><th style="width:130px;text-align:right">Verze</th></tr></thead><tbody>${body}</tbody></table></div>
+        ${filtered.length > size ? pagerHtml(filtered.length, from, shown.length, pages) : ""}`;
+    }
+    // Stránkování: první / předchozí / okolní čísla / další / poslední.
+    function pagerHtml(total, from, count, pages) {
+      const nums = [];
+      const start = Math.max(1, Math.min(page - 2, pages - 4)); // pevné okno 5 čísel, posouvá se s aktuální stránkou
+      for (let p = start; p <= Math.min(pages, start + 4); p++) nums.push(p);
+      const b = (label, p, extra = "") => `<button type="button" class="btn btn-secondary${extra}" data-page="${p}"${p < 1 || p > pages || p === page && !extra ? " disabled" : ""}>${label}</button>`;
+      return `<div class="pager">
+        <span class="info muted">${num(from + 1)}–${num(from + count)} z ${num(total)}</span>
+        <span class="pages">${b("«", 1)}${b("‹", page - 1)}${nums.map(p => b(num(p), p, p === page ? " cur" : "")).join("")}${b("›", page + 1)}${b("»", pages)}</span>
+      </div>`;
+    }
+    function wireTable() {
+      document.querySelectorAll('input[name="filter"]').forEach(r => r.addEventListener("change", () => { tableFilter = r.value; page = 1; paintResult(); }));
+      document.querySelectorAll('.pager [data-page]').forEach(b => b.addEventListener("click", () => { page = Number(b.dataset.page); paintResult(); }));
+      fitRows();
+    }
+    // Velikost stránky podle viditelné výšky tabulky (max. 25 řádků) — stránka se nikdy neskroluje.
+    let fitting = false;
+    function fitRows() {
+      if (fitting) return;
+      const wrap = resultBox.querySelector(".tableWrap"); if (!wrap) return;
+      const thead = wrap.querySelector("thead"); const tr = wrap.querySelector("tbody tr");
+      const rowH = tr ? tr.getBoundingClientRect().height : 38;
+      const pagerH = resultBox.querySelector(".pager") ? 0 : 32 + 13.6; // místo pro pager, pokud se teprve objeví
+      const fit = Math.min(PAGE_SIZE_MAX, Math.max(3, Math.floor((wrap.clientHeight - pagerH - (thead ? thead.getBoundingClientRect().height : 0)) / rowH)));
+      if (fit !== pageSizeFit) { pageSizeFit = fit; fitting = true; paintResult(); fitting = false; }
+    }
+    new ResizeObserver(() => fitRows()).observe(resultBox);
+
+
+    const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+  </script>
+</body>
+</html>

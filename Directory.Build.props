@@ -1,0 +1,40 @@
+<Project>
+
+  <!--
+    Sdílené build vlastnosti pro celou solution FileSystemChangeTracker.
+    Tento soubor MSBuild automaticky importuje do každého projektu pod tímto adresářem,
+    takže jednotlivé .csproj zůstávají minimální.
+  -->
+
+  <PropertyGroup>
+    <!-- Cílový framework a jazyk -->
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Kvalita kódu -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!-- Nutné, aby IDE0005 (nepoužité usingy) fungovalo i při buildu; CS1591 (chybějící
+         XML doc komentáře) ale potlačíme, dokumentační komentáře nevyžadujeme. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Reproducibilní build -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Bezpečnost balíčků">
+    <!-- Audit i tranzitivních závislostí proti známým CVE při restore. -->
+    <NuGetAuditMode>all</NuGetAuditMode>
+  </PropertyGroup>
+
+</Project>

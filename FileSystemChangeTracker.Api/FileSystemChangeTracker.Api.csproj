@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Společné vlastnosti (TargetFramework, Nullable, ImplicitUsings, ...) jsou v ../Directory.Build.props.
+    Verze NuGet balíčků jsou v ../Directory.Packages.props (Central Package Management).
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" />
+  </ItemGroup>
+
+</Project>

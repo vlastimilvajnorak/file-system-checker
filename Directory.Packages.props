@@ -1,0 +1,32 @@
+<Project>
+
+  <!--
+    Central Package Management (CPM).
+    Verze NuGet balíčků jsou definovány na jednom místě zde pomocí <PackageVersion>.
+    Jednotlivé projekty pak používají jen <PackageReference Include="..." /> bez Version.
+    Dokumentace: https://learn.microsoft.com/nuget/consume-packages/central-package-management
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Aplikace">
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <!-- Tranzitivní pin (CentralPackageTransitivePinningEnabled): Microsoft.AspNetCore.OpenApi
+         tahá Microsoft.OpenApi 2.0.0, které má známou zranitelnost GHSA-v5pm-xwqc-g5wc
+         (NU1903 při auditu). Opraveno od 2.7.5; pin na aktuální 2.x. -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.10.0" />
+    <PackageVersion Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.2.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Testy">
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+</Project>
