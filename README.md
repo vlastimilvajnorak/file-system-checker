@@ -9,6 +9,22 @@ podadresáře). U každého souboru eviduje verzi.
 
 ---
 
+## Screenshots
+
+### Start screen
+
+![Start screen with the directory path input](screenshots/start-screen.png)
+
+### Analysis in progress
+
+![Analysis in progress with directory, file, and processed-data counters](screenshots/analysis-in-progress.png)
+
+### Cancelled analysis results
+
+![Cancelled analysis with partial results and change filters](screenshots/cancelled-analysis-results.png)
+
+---
+
 ## Zadání
 
 *Cvičný úkol PUX design – Hledáme šikovného web developera!*
