@@ -9,21 +9,11 @@ podadresáře). U každého souboru eviduje verzi.
 
 ---
 
-## Screenshots
+![Start screen](docs/screenshots/start-screen.png)
 
-**Start screen** - the directory path input before the first analysis.
+![Analysis in progress](docs/screenshots/analysis-in-progress.png)
 
-![Start screen with the directory path input](docs/screenshots/start-screen.png)
-
-**Analysis in progress** - progress counters and the file currently being processed.
-
-![Analysis in progress with directory, file, and processed-data counters](docs/screenshots/analysis-in-progress.png)
-
-**Cancelled analysis** - partial results with change filters and file versions.
-
-![Cancelled analysis with partial results and change filters](docs/screenshots/cancelled-analysis-results.png)
-
----
+![Cancelled analysis results](docs/screenshots/cancelled-analysis-results.png)
 
 ## Zadání
 
