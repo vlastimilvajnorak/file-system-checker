@@ -9,12 +9,6 @@ podadresáře). U každého souboru eviduje verzi.
 
 ---
 
-![Start screen](docs/screenshots/start-screen.png)
-
-![Analysis in progress](docs/screenshots/analysis-in-progress.png)
-
-![Cancelled analysis results](docs/screenshots/cancelled-analysis-results.png)
-
 ## Zadání
 
 *Cvičný úkol PUX design – Hledáme šikovného web developera!*
@@ -344,3 +338,11 @@ by na Linuxu zůstalo doslovným názvem adresáře).
 ## Licence
 
 [GNU GPL v3](LICENSE.txt).
+
+## Screenshots
+
+![Start screen](docs/screenshots/start-screen.png)
+
+![Analysis in progress](docs/screenshots/analysis-in-progress.png)
+
+![Cancelled analysis results](docs/screenshots/cancelled-analysis-results.png)
